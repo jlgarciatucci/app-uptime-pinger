@@ -2,7 +2,6 @@ name: Keep Streamlit apps awake
 
 on:
   schedule:
-    # Every 6 hours, UTC
     - cron: "0 */6 * * *"
   workflow_dispatch:
 
@@ -15,8 +14,28 @@ jobs:
         env:
           APP_URLS: ${{ secrets.APP_URLS }}
         run: |
+          failed=0
+
           echo "$APP_URLS" | while read -r url; do
             [ -z "$url" ] && continue
-            echo "Pinging $url"
-            curl -L --max-time 60 --retry 2 --retry-delay 10 "$url" > /dev/null || true
+
+            echo "--------------------------------"
+            echo "Pinging: $url"
+
+            status=$(curl -s -o /dev/null -w "%{http_code}" \
+              --max-time 60 \
+              --retry 2 \
+              --retry-delay 10 \
+              "$url" || echo "000")
+
+            echo "HTTP status: $status"
+
+            if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
+              echo "OK"
+            else
+              echo "FAILED"
+              failed=1
+            fi
           done
+
+          exit $failed
