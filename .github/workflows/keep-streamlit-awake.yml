@@ -1,4 +1,4 @@
-name: Keep Streamlit apps awake
+name: Keep apps awake
 
 on:
   schedule:
@@ -10,22 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ping Streamlit apps
+      - name: Ping apps
         env:
           APP_URLS: ${{ secrets.APP_URLS }}
         run: |
           failed=0
 
-          echo "$APP_URLS" | while read -r url; do
+          while IFS= read -r url; do
             [ -z "$url" ] && continue
 
             echo "--------------------------------"
             echo "Pinging: $url"
 
-            status=$(curl -sS -L -o /dev/null -w "%{http_code}" --max-time 120 --retry 2 --retry-delay 15 "$url" \
-              --max-time 60 \
+            status=$(curl -sS -L -o /dev/null -w "%{http_code}" \
+              --max-time 120 \
               --retry 2 \
-              --retry-delay 10 \
+              --retry-delay 15 \
               "$url" || echo "000")
 
             echo "HTTP status: $status"
@@ -36,6 +36,6 @@ jobs:
               echo "FAILED"
               failed=1
             fi
-          done
+          done <<< "$APP_URLS"
 
           exit $failed
