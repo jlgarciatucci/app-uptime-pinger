@@ -22,13 +22,18 @@ jobs:
             echo "--------------------------------"
             echo "Pinging: $url"
 
-            status=$(curl -sS -L -o /dev/null -w "%{http_code}" \
+            if status=$(curl -sS -o /dev/null -w "%{http_code}" \
               --max-time 120 \
               --retry 2 \
               --retry-delay 15 \
-              "$url" || echo "000")
-
-            echo "HTTP status: $status"
+              "$url"); then
+              echo "HTTP status: $status"
+            else
+              echo "HTTP status: 000"
+              echo "FAILED"
+              failed=1
+              continue
+            fi
 
             if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
               echo "OK"
