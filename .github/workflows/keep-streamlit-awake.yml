@@ -6,41 +6,66 @@ on:
   workflow_dispatch:
 
 jobs:
-  ping:
+  keep-awake:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Ping apps
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Playwright
+        run: |
+          npm init -y
+          npm install playwright
+          npx playwright install chromium --with-deps
+
+      - name: Open apps in headless browser
         env:
           APP_URLS: ${{ secrets.APP_URLS }}
         run: |
-          failed=0
+          cat > keep-awake.js <<'EOF'
+          const { chromium } = require('playwright');
 
-          while IFS= read -r url; do
-            [ -z "$url" ] && continue
+          const urls = process.env.APP_URLS
+            .split(/\r?\n/)
+            .map(u => u.trim())
+            .filter(Boolean);
 
-            echo "--------------------------------"
-            echo "Pinging: $url"
+          (async () => {
+            const browser = await chromium.launch({ headless: true });
+            let failed = false;
 
-            if status=$(curl -sS -o /dev/null -w "%{http_code}" \
-              --max-time 120 \
-              --retry 2 \
-              --retry-delay 15 \
-              "$url"); then
-              echo "HTTP status: $status"
-            else
-              echo "HTTP status: 000"
-              echo "FAILED"
-              failed=1
-              continue
-            fi
+            for (const url of urls) {
+              console.log("--------------------------------");
+              console.log("Opening:", url);
 
-            if [ "$status" -ge 200 ] && [ "$status" -lt 400 ]; then
-              echo "OK"
-            else
-              echo "FAILED"
-              failed=1
-            fi
-          done <<< "$APP_URLS"
+              const page = await browser.newPage();
 
-          exit $failed
+              try {
+                await page.goto(url, {
+                  waitUntil: "domcontentloaded",
+                  timeout: 120000
+                });
+
+                await page.waitForTimeout(30000);
+
+                const title = await page.title();
+                console.log("Title:", title || "(no title)");
+                console.log("OK");
+              } catch (error) {
+                console.log("FAILED:", error.message);
+                failed = true;
+              } finally {
+                await page.close();
+              }
+            }
+
+            await browser.close();
+
+            if (failed) process.exit(1);
+          })();
+          EOF
+
+          node keep-awake.js
